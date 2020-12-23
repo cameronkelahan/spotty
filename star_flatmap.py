@@ -155,7 +155,7 @@ class Spotmodel:
         
         # Save and show the surface map values (1 or 0) that create the red/black map image (rectangular shape)
         # NOTE: the plt.show() function does not scale well with this plot, must view from file
-        plt.savefig('./ProxCen/FlatMap.png')
+        plt.savefig('./spotty/ProxCen/FlatMap.png')
         # plt.show()
         return surface_map
 
@@ -183,5 +183,7 @@ if __name__ == "__main__":
 
     surface_map = SM.generate_spots()
 
+    surface_map = surface_map.astype(np.int8)
+
     # Saves the numpy array version of the flat surface map to be loaded into other programs
-    np.save('./ProxCen/flatMap.npy', surface_map)
+    np.save('./spotty/ProxCen/flatMap.npy', surface_map)
