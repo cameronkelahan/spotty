@@ -7,15 +7,13 @@ The user interacts with the input parameters through a config file. There is an 
 
 The use of this code has an order.
 
-1)  If 'FlatMap.npy' already exists in the current star's folder (ex: ProxCen), skip this step. If not, the user must run star_flatmap.py
-in order to generate the 'flat surface map' of the star. This is necessary for the next step.
+1)  If 'FlatMap.npy' already exists in the current star's folder (ex: ProxCen), skip this step. If not, the user must run star_flatmap.py in order to generate the 'flat surface map' of the star. This is necessary for the next step.
 
-2) If the "HemiMapImages+Arrays" folder inside the current star's folder is already populated with .png and .txt files, skip this step. Otherwise,
-run this program to create the Hemishpere Images of the star and save the arrays of that information. The number
+2) If the "HemiMapImages+Arrays" folder inside the current star's folder is already populated with .png and .txt files, skip this step. Otherwise, run this program to create the Hemishpere Images of the star and save the arrays of that information. The number
 of hemisphere map images and arrays created will equal the 'num_exposures' value in the chosen config file.
-- Note: Current setup creates hemispheres with gridshape of 3000x3000. This take a long time to run. Can lower the number to create hemisphere maps quicker, but at a lower resolution.
+- **Note: Current setup creates hemispheres with gridshape of 3000x3000. This take a long time to run. You can lower the 'regrid_shape' variable in 'generate_hemisphere_map' to create hemisphere maps quicker, but at a lower resolution.
 
-3) Once the hemisphere arrays have been created, the rest of the programs can be run in any order, as they all
+3) Once the hemisphere maps/arrays have been created, the rest of the programs can be run in any order, as they all
 only depend on the hemisphere arrays.
 
 - star_spectra.py:
@@ -39,6 +37,8 @@ only depend on the hemisphere arrays.
               photo flux.
     
     A graph depicting equation 1 is created, then a graph depicting B - A is created.
+    
+    **Update: Also creates a graph showing the difference in flux of each wavelength at phases 0 and 180.
     
 - variabilityWoutSmoothing
     - This program creates two colormaps which show each wavelength's variability across all phases/images taken.
