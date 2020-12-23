@@ -87,7 +87,7 @@ class Spectramodel(Hemimodel):
         plt.ylabel("Flux (ERG/CM2/S/A)")
         plt.title("Linearly Combined Star and Spot Flux Values")
         
-        plt.savefig("./ProxCen/SpectrumGraphs/combinedHemiSpectrum_%d" % count)
+        plt.savefig("./spotty/ProxCen/SpectrumGraphs/combinedHemiSpectrum_%d" % count)
         # plt.show()
         plt.close("all")
 
@@ -160,9 +160,9 @@ class Spectramodel(Hemimodel):
             plt.legend(loc='upper right')
             plot_count += 1
         if normalized_bins:
-            plt.savefig("./ProxCen/BinnedSpectraNorm/binnedNormHemiSpectrum_%d.png" % count)
+            plt.savefig("./spotty/ProxCen/BinnedSpectraNorm/binnedNormHemiSpectrum_%d.png" % count)
         else:
-            plt.savefig("./ProxCen/BinnedSpectra/binnedHemiSpectrum_%d.png" % count)
+            plt.savefig("./spotty/ProxCen/BinnedSpectra/binnedHemiSpectrum_%d.png" % count)
         # plt.show()
         plt.close("all")
 
@@ -182,7 +182,7 @@ class Spectramodel(Hemimodel):
         plt.yscale("log")
         plt.ylabel("Flux (ERG/CM2/S/A)")
         plt.xlabel("Phase (0-360)")
-        plt.savefig('./ProxCen/LightCurves/LightCurve_%d' % count, bbox_inches='tight')
+        plt.savefig('./spotty/ProxCen/LightCurves/LightCurve_%d' % count, bbox_inches='tight')
         # plt.show()
         plt.close("all")
 
@@ -194,7 +194,7 @@ if __name__ == "__main__":
     while True:
         try:
             fileName = input("Config File Path ./Config/")
-            configParser.read_file(open("./Config/%s" % fileName))
+            configParser.read_file(open("./spotty/Config/%s" % fileName))
             break
         except FileNotFoundError:
             print("There is no file by that name, please try again.")
@@ -291,7 +291,7 @@ if __name__ == "__main__":
     # This for loop is for each hemisphere image/each phase
     for value in range(num_exposures):
         # Loads in the hemiMap information for the current phase
-        hemi_map = np.load('./ProxCen/HemiMapImages+Arrays/hemiArray_%d' % count, allow_pickle=True)
+        hemi_map = np.load('./spotty/ProxCen/HemiMapImages+Arrays/hemiArray_%d' % count, allow_pickle=True)
 
         # Calculates the star's combined spectrum for the given hemisphere and adds a column to the SM's
         # model info called sumflux

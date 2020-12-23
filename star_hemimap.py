@@ -48,12 +48,12 @@ class Hemimodel():
 
         # Saves each hemishpere map image to file
         # Number of saved images will be equal to num_exposures value in config file
-        plt.savefig("./ProxCen/HemiMapImages+Arrays/hemiMap_%d.png" % count)
+        plt.savefig("./spotty/ProxCen/HemiMapImages+Arrays/hemiMap_%d.png" % count)
         # plt.show()
         plt.close("all")
 
         # Save the pickle numpy array version of the hemisphere map to load in other programs later
-        hemi_map.dump('./ProxCen/HemiMapImages+Arrays/hemiArray_%d' % count)
+        hemi_map.dump('./spotty/ProxCen/HemiMapImages+Arrays/hemiArray_%d' % count)
 
         return hemi_map
 
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     while True:
         try:
             fileName = input("Config File Path ./Config/")
-            configParser.read_file(open("./Config/%s" % fileName))
+            configParser.read_file(open("./spotty/Config/%s" % fileName))
             break
         except FileNotFoundError:
             print("There is no file by that name, please try again.")

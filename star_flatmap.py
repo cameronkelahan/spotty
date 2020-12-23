@@ -164,8 +164,8 @@ if __name__ == "__main__":
     configParser = configparser.RawConfigParser()
     while True:
         try:
-            fileName = input("Config File Path ./Config/")
-            configParser.read_file(open("./Config/%s" % fileName))
+            fileName = input("Config File Path ./spotty/Config/")
+            configParser.read_file(open("./spotty/Config/%s" % fileName))
             break
         except FileNotFoundError:
             print("There is no file by that name, please try again.")

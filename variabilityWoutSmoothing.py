@@ -150,7 +150,7 @@ class Starmodel(Spectramodel):
         plt.title('Fractional Change in Intensity for Each Wavelength')
         plt.xlabel('Phase (0-360)')
         plt.ylabel('Wavelength (0-20 um)')
-        plt.savefig('./ProxCen/VariabilityGraphs/contourFracChange.png', dpi=200)
+        plt.savefig('./spotty/ProxCen/VariabilityGraphs/contourFracChange.png', dpi=200)
         plt.show()
         plt.close("all")
 
@@ -179,7 +179,7 @@ class Starmodel(Spectramodel):
         plt.ylabel('Wavelength (0-20 um)')
 
         plt.title('Logarithmic Fractional Change in Intensity for Each Wavelength')
-        plt.savefig('./ProxCen/VariabilityGraphs/contourLogFracChange.png', dpi=200)
+        plt.savefig('./spotty/ProxCen/VariabilityGraphs/contourLogFracChange.png', dpi=200)
         plt.show()
         print("Done")
 
@@ -188,7 +188,7 @@ if __name__ == "__main__":
     configParser = configparser.RawConfigParser()
     while True:
         try:
-            fileName = input("Config File Path ./Config/")
+            fileName = input("Config File Path ./spotty/Config/")
             configParser.read_file(open("./Config/%s" % fileName))
             break
         except FileNotFoundError:
@@ -302,7 +302,7 @@ if __name__ == "__main__":
 
     # This for loop is for each hemisphere image
     for value in range(num_exposures):
-        hemi_map = np.load('./ProxCen/HemiMapImages+Arrays/hemiArray_%d' % count, allow_pickle=True)
+        hemi_map = np.load('./spotty/ProxCen/HemiMapImages+Arrays/hemiArray_%d' % count, allow_pickle=True)
 
         # Calculates the star's combined spectrum for the given hemisphere and adds a column to the SM's
         # model info called sumflux
@@ -334,7 +334,7 @@ if __name__ == "__main__":
         pass
         
 
-    np.save('./ProxCen/VariabilityGraphs/contourPlotValues.npy', color_plot_values)
+    np.save('./spotty/ProxCen/VariabilityGraphs/contourPlotValues.npy', color_plot_values)
     # temp = np.load('./ProxCen/VariabilityGraphs/contourPlotValues.npy')
     # print("Temp = ", temp)
     # print(type(temp))
