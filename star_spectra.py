@@ -9,7 +9,7 @@ from star_flatmap import readmodel
 
 # This program creates plots of the star's spectrum and light curve as it rotates
 
-class Spectramodel(Hemimodel):
+class Spectramodel():
     def __init__(
         self,
         teffStar,
@@ -47,14 +47,18 @@ class Spectramodel(Hemimodel):
 
     # Calculate the percentage of the current phase's surface taken up by the spots
     def calculate_coverage(self, hemi_map, ignore_planet=False):
+        # add where the 3rd dimension index is certain color
         flat_image = hemi_map[~hemi_map.mask].flatten()
         total_size = flat_image.shape[0]
-        photo = np.where(flat_image == 0)[0].shape[0]
-        spot = np.where(flat_image == 1)[0].shape[0]
-        planet  = np.where(flat_image == 2)[0].shape[0]
+        spot = sum(flat_image)
+        photo = total_size - spot
+        # photo = np.where(flat_image == 0)[0].shape[0]
+        # spot = np.where(flat_image == 1)[0].shape[0]
+        # planet  = np.where(flat_image == 2)[0].shape[0]
 
         if ignore_planet:
-           total_size_mod = total_size - planet
+        #    total_size_mod = total_size - planet
+            pass
         else:
             total_size_mod = total_size
 
@@ -87,7 +91,7 @@ class Spectramodel(Hemimodel):
         plt.ylabel("Flux (ERG/CM2/S/A)")
         plt.title("Linearly Combined Star and Spot Flux Values")
         
-        plt.savefig("./spotty/ProxCen/SpectrumGraphs/combinedHemiSpectrum_%d" % count)
+        # plt.savefig("./spotty/ProxCen/SpectrumGraphs/combinedHemiSpectrum_%d" % count)
         # plt.show()
         plt.close("all")
 
@@ -182,7 +186,7 @@ class Spectramodel(Hemimodel):
         plt.yscale("log")
         plt.ylabel("Flux (ERG/CM2/S/A)")
         plt.xlabel("Phase (0-360)")
-        plt.savefig('./spotty/ProxCen/LightCurves/LightCurve_%d' % count, bbox_inches='tight')
+        # plt.savefig('./spotty/ProxCen/LightCurves/LightCurve_%d' % count, bbox_inches='tight')
         # plt.show()
         plt.close("all")
 
@@ -245,31 +249,31 @@ if __name__ == "__main__":
     deltaPhase = exposure_time_percent / 100
     # print("Delta Phase = ", deltaPhase)
     
-    starspectrum = readmodel(
+    starspectrum, starSpectrumString = readmodel(
         phot_model_file,
         cut_range=True,
         rangemin=0,  # in micron, based on MIRECLE constraints
         rangemax=20.000,  # in micron, based on  MIRECLE constraints
-        grid_data=True,
-        ngridpoints=3000,
+        bin_data=True,
+        resolvingPower=5000,
     )
 
-    spotspectrum = readmodel(
+    spotspectrum, spotSpectrumString = readmodel(
         spot_model_file,
         cut_range=True,
         rangemin=0,  # in micron, based on MIRECLE constraints
         rangemax=20.000,  # in micron, based on MIRECLE constraints
-        grid_data=True,
-        ngridpoints=3000,
+        bin_data=True,
+        resolvingPower=5000,
     )
 
-    faculaespectrum = readmodel(
+    faculaespectrum, faculaeSpectrumString = readmodel(
         fac_model_file,
         cut_range=True,
         rangemin=0, # in micron, based on MIRECLE constraints
         rangemax=20.000, # in micron, based on MIRECLE constraints
-        grid_data=True,
-        ngridpoints=3000,
+        bin_data=True,
+        resolvingPower=5000,
     )
 
     # Create a HemiMap class
@@ -288,6 +292,9 @@ if __name__ == "__main__":
     count = 0
     x = []
     y = []
+
+    hemi_fluxes = [[SM.modelspectra.wavelength], []]
+
     # This for loop is for each hemisphere image/each phase
     for value in range(num_exposures):
         # Loads in the hemiMap information for the current phase
@@ -297,6 +304,8 @@ if __name__ == "__main__":
         # model info called sumflux
         SM.calculate_combined_spectrum(hemi_map)
         SM.plot_combined_spectrum(count)
+
+        hemi_fluxes[1].append(SM.modelspectra.sumflux)
 
         # This keeps track of which bin is being looked at currently
         list_index = 0
@@ -314,3 +323,9 @@ if __name__ == "__main__":
 
         # remove this phase's sumflux column of the modelspectra data frame of the SM object to make way for the next phase
         del SM.modelspectra['sumflux']
+
+    hemi_fluxes = np.asarray(hemi_fluxes)
+    # np.save('./spotty/ProxCen/SumfluxArraysByPhase/wavelengthsAndSumfluxValuesByPhase.npy', hemi_fluxes, allow_pickle=True)
+
+    loaded = np.load('./spotty/ProxCen/SumfluxArraysByPhase/wavelengthsAndSumfluxValuesByPhase.npy', allow_pickle=True)
+    print("Done")

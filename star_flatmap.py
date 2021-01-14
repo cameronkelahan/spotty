@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from numba import jit, njit
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from statistics import mean
 import matplotlib
 import configparser
 
@@ -30,20 +31,23 @@ def readmodel(
     cut_range=False,
     rangemin=None,  # in micron
     rangemax=None,  # in micron
-    grid_data=False,
-    ngridpoints=None,
+    bin_data=False,
+    resolvingPower=None,
 ):
     if (cut_range and rangemin is None) | (cut_range and rangemax is None):
         raise TypeError("If cut_range is True, cutmin and cutmax must not be None")
     if (
-        (grid_data and rangemin is None)
+        (bin_data and rangemin is None)
         | (rangemin and rangemin is None)
-        | (rangemin and ngridpoints is None)
+        | (rangemin and resolvingPower is None)
     ):
-        raise TypeError("If grid_data is True, cutmin and cutmax must not be None")
+        raise TypeError("If bin_data is True, cutmin and cutmax must not be None")
 
     model = pd.read_csv(
-        filename, skiprows=7, delim_whitespace=True, names=["wavelength", "flux"]
+        # For the binned NextGenModels
+        filename, skiprows=1, delim_whitespace=True, names=["wavelength", "flux"]
+        # # For the original btNextGenStellarModels
+        # filename, skiprows=7, delim_whitespace=True, names=["wavelength", "flux"]
     )
 
     # lets convert to micron
@@ -52,39 +56,158 @@ def readmodel(
         model = model.loc[
             (model.wavelength >= rangemin) & (model.wavelength <= rangemax)
         ]
-    
-    # # This code plots the difference in wavelength values of the raw data. Shows aaresolution across the model
-    # wavelengthDifference = []
-    # count = 0
-    # for value in model.wavelength:
-    #     if count == len(model.wavelength) - 1:
-    #         wavelengthDifference.append(0.001)
-    #         print("End of file")
-    #     else:
-    #         diff = model.wavelength[count + 1] - value
-    #         wavelengthDifference.append(diff)
-    #         print(diff)
-    #         if diff > 0.05:
-    #             print(model.wavelength[count])
-    #             print("Greater than 0.05")
-    #             print(diff)
-    #     count += 1
-    
-    # fig = plt.figure()
-    # plt.plot(model.wavelength, wavelengthDifference)
-    # plt.title("Wavelength Spacing of NextGen Data")
-    # plt.ylabel("Delta Wavelength")
-    # plt.xlabel("Wavelength (um)")
-    # plt.savefig('./ProxCen/VariabilityGraphs/wavelengthSpacingOfRawData.png')
-    # # plt.show()
-    # print("Plot done")
 
-    if grid_data:
-        wavenew = np.linspace(rangemin, rangemax, ngridpoints)
-        fluxnew = np.interp(wavenew, model.wavelength, model.flux)
-        data = {"wavelength": wavenew, "flux": fluxnew}
-        model = pd.DataFrame(data=data)
-    return model
+    # Bin the nextGen data to the specified resolving power
+    if bin_data:
+        # Create an empty dictionary to store the binned wavelength/flux pairs
+        binnedValuesDict = {}
+        # Create an empty dictionary to store the binned wavelength/flux pairs as formatted strings
+        binnedStringValuesDict={}
+
+        centerWavelength = .2
+        wavelengthCounter = 0
+        prevFirst = 0
+        while wavelengthCounter < len(model.wavelength):
+            wavelength = model.wavelength.values[wavelengthCounter]
+
+            # finds the first center wavelength
+            if wavelength >= centerWavelength:
+                # Calculate the deltalambda of the current center wavelength
+                deltaLambda = centerWavelength / resolvingPower
+
+                # find the high and low value of the bin for the center wavelength
+                lowValue = centerWavelength - deltaLambda
+                highValue = centerWavelength + deltaLambda
+                
+                fluxValuesInRange = []
+                
+                # run through each wavelength looking for the values in this bin's range
+                # These variables keep track of the smallest difference between the high or low limit of the bin
+                # and the wavelength closest to them in the dataset
+                # Theya re used when there are no wavelengths from the dataset that fall in the bin range
+                smallestDiff = 9999999999999999999
+                closestWavelengthIndex = -1
+                waveIndex = prevFirst
+                first = True
+
+                while True:
+                    value = model.wavelength.values[waveIndex]
+                    currentDiff = min(abs(lowValue - value), abs(highValue - value))
+                    if currentDiff < smallestDiff:
+                        smallestDiff = currentDiff
+                        closestWavelengthIndex = waveIndex
+                    if value >= lowValue and value <= highValue:
+                        # Add the appropriate flux values to the list
+                        fluxValuesInRange.append(model.flux.values[waveIndex])
+                        if first:
+                            prevFirst = waveIndex
+                            first = False
+                    elif value > highValue:
+                        # Check to see if the list of flux values in range is empty
+                        if not fluxValuesInRange:
+                            fluxValuesInRange.append(model.flux.values[closestWavelengthIndex])
+                        break
+                    waveIndex += 1
+                
+                # calcualte the bin's average
+                binAverageFlux = mean(fluxValuesInRange)
+                binAverageFluxString = "{:.7e}".format(binAverageFlux)
+                
+                # add the wavelength/flux pair to the dictionary
+                binnedValuesDict[centerWavelength] = binAverageFlux
+                centerWavelengthString = "{:.9e}".format(centerWavelength)
+                binnedStringValuesDict[centerWavelengthString] = binAverageFluxString
+
+                # calculate the new center wavelength by adding it to the current delta lambda
+                centerWavelength = centerWavelength + deltaLambda
+
+            # print(wavelength)
+            if centerWavelength > 20:
+                break
+
+            wavelengthCounter += 1
+
+        # Create a list of wavelength, flux pairs of the binnned data
+        # binnedData = []
+        # for key in binnedValuesDict:
+        #     listPair = [key, binnedValuesDict[key]]
+        #     binnedData.append(listPair)
+
+        print(type(binnedValuesDict.items()))
+        binnedModel = pd.DataFrame(list(binnedValuesDict.items()), columns=['wavelength', 'flux'])
+        binnedModelStrings = pd.DataFrame(list(binnedStringValuesDict.items()), columns=['wavelength', 'flux'])
+        print(binnedModel)
+        print(binnedModel.columns)
+        print("done")
+
+    # This code plots the difference in wavelength values of the raw data. Shows a resolution across the model
+    wavelengthDifference = []
+    wavelengthResolution = []
+    frequencyList = []
+    frequencyDiff = []
+    c = 2.99e14
+    count = 0
+    for value in binnedModel.wavelength:
+        if count == len(binnedModel.wavelength) - 1 or count == 0:
+            wavelengthDifference.append(float('nan'))
+            wavelengthResolution.append(float('nan'))
+            frequencyDiff.append(float('nan'))
+            frequencyList.append(float('nan'))
+            print("End of file")
+        else:
+            frequency = c/value
+            diffWave = binnedModel.wavelength[count + 1] - value
+            diffFreq = (frequency) - (c/binnedModel.wavelength[count + 1])
+            wavelengthDifference.append(diffWave)
+            wavelengthResolution.append(value/diffWave)
+            frequencyList.append(frequency)
+            frequencyDiff.append(diffFreq)
+
+            print(diffWave)
+            print(value/diffWave)
+            print(diffFreq)
+            if diffWave > 0.05:
+                print(model.wavelength[count])
+                print("Greater than 0.05")
+                print(diffWave)
+        count += 1
+    
+    fig = plt.figure()
+    plt.yscale('log')
+    plt.plot(binnedModel.wavelength, wavelengthDifference)
+    plt.title("Wavelength Spacing of NextGen Data")
+    plt.ylabel("Delta Wavelength")
+    plt.xlabel("Wavelength (um)")
+    plt.savefig('./spotty/BinnedNextGenModels/VariabilityGraphs/wavelengthSpacingOfRawData.png', bbox_inches='tight')
+    # plt.show()
+    plt.close("all")
+    print("WavelengthDiffPlot done")
+
+    fig = plt.figure()
+    # plt.yscale('log')
+    plt.ticklabel_format(useOffset=False, style='plain')
+    plt.ylim(resolvingPower - 1, resolvingPower + 1)
+    plt.plot(binnedModel.wavelength, wavelengthResolution)
+    plt.title("Wavelength Resolution of NextGen Data")
+    plt.ylabel("Wavelength/Delta Wavelength (Wavelength Resolving Power)")
+    plt.xlabel("Wavelength (um)")
+    plt.savefig('./spotty/BinnedNextGenModels/VariabilityGraphs/wavelengthResolvingPower.png', bbox_inches='tight')
+    # plt.show()
+    plt.close("all")
+    print("WavelengthResolvingPowerPlot done")
+
+    fig = plt.figure()
+    plt.yscale('log')
+    plt.plot(frequencyList, frequencyDiff)
+    plt.title("Delta Frequency of NextGen Data")
+    plt.ylabel("Delta Frequency")
+    plt.xlabel("Frequency (um/s)")
+    plt.savefig('./spotty/BinnedNextGenModels/VariabilityGraphs/frequencyDiff.png', bbox_inches='tight')
+    # plt.show()
+    plt.close("all")
+    print("FrequencyDiffPlot done")
+
+    return binnedModel, binnedModelStrings
 
 class Spotmodel:
     def __init__(
