@@ -17,6 +17,7 @@ import configparser
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 from statistics import mean
 
 def findEndIndices():
@@ -27,14 +28,17 @@ def readmodel(
     cut_range=False,
     rangemin=None,  # in micron
     rangemax=None,  # in micron
-    grid_data=False,
+    bin_data=False,
     ngridpoints=None,
-    resolvingpower=5000,
+    resolvingPower=5000,
+    topValues=None,
+    cwValues=None,
+    start_time=None
 ):
     if (cut_range and rangemin is None) | (cut_range and rangemax is None):
         raise TypeError("If cut_range is True, cutmin and cutmax must not be None")
     if (
-        (grid_data and rangemin is None)
+        (bin_data and rangemin is None)
         | (rangemin and rangemin is None)
         | (rangemin and ngridpoints is None)
     ):
@@ -53,104 +57,84 @@ def readmodel(
             (model.wavelength >= rangemin) & (model.wavelength <= rangemax)
         ]
 
-    # Start with the smallest wavelength value
-    # To achieve a resolving power of 5000, divide the current lambda by 5000 to get the delta lambda value
-    # Once the flux value of that lambda is calculated, add the delta lambda to the lambda to get new center wavelength
-    
-    # Start at 2 microns
-    # 2 is the center, with .0004 as the delta lambda
-    # 1) bin (average) the values from 1.9996 to 2.0004
+    ultimaLam=0.0
+    lastLam=0.0
+    lam = 0.0
+    ultimaVal=0.0
+    lastVal=0.0
+    val = 0.0
+    meanVal=0.0
+    numValues = 0
+    l=0
+    bottom = 0.0
+    outputY = []
+    outputYstring = []
+    cwValuesString = []
 
-    # Next central wavelength is current center (2) + current delta lambda (.0004)
-    # 2) 2.0004 is the next center, with .00040008 as the next delta lambda
-        # - lower = 1.99999992, uppper = 2.00080008
+    lambdaIndex = 0
+    while lambdaIndex < len(model.wavelength):
+        lam = model.wavelength.values[lambdaIndex]
+        val = model.flux.values[lambdaIndex]
 
-    # position = 0
-    # for wavelength in model.wavelength:
-    #     if wavelength >= 1.999:
-    #         print("Wavelength = ", wavelength, "; position = ", position)
-    #     position += 1
+        if lastLam == 0:
+            lastLam = lam - 1e-6
+            ultimaLam = lastLam - 1e-6
+            lastVal = val
+            ultimaVal = lastVal
+            meanVal=0.0
+            numberOfValues=0
+            bottom = cwValues[0] - (topValues[0] - cwValues[0])
+        if lam < bottom:
+            numberOfValues = 0
+            meanVal = 0.0
 
-    # Create an empty dictionary to store the binned wavelength/flux pairs
-    binnedValuesDict = {}
-    # Create an empty dictionary to store the binned wavelength/flux pairs as formatted strings
-    binnedStringValuesDict={}
+        # print("Lambda Index = ", lambdaIndex)
+        # print("current l = ", l)
+        # print("Current Top = ", topValues[l])
+        # print("Bottom = ", bottom)
+        # print("Current Lam = ", lam)
+        # print("Last Lam = ", lastLam)
+        # print("Ultimate Lam = ", ultimaLam)
+        # print("Current Val = ", val)
+        # print("Last Val = ", lastVal)
+        # print("Ultimate Val = ", ultimaVal)
+        # print("Mean Val = ", meanVal)
+        # print("Number of Vals = ", numberOfValues)
+        while l < len(cwValues) and topValues[l] < lam:
+            if numberOfValues > 1:
+                temp = meanVal/numberOfValues
+                outputY.append(temp)
+                outputYstring.append("{:.7e}".format(temp))
+            elif topValues[l] > lastLam:
+                temp = (val  - lastVal)*(cwValues[l] - lastLam)/( lam - lastLam) + lastVal
+                outputY.append(temp)
+                outputYstring.append("{:.7e}".format(temp))
+            elif topValues[l] > ultimaLam:
+                temp = (lastVal - ultimaVal) * (cwValues[l] - ultimaLam) / (lastLam - ultimaLam) + ultimaVal
+                outputY.append(temp)
+                outputYstring.append("{:.7e}".format(temp))
+            else:
+                outputY.append(ultimaVal)
+                outputYstring.append("{:.7e}".format(ultimaVal))
+            bottom = topValues[l]
+            cwValuesString.append("{:.9e}".format(cwValues[l]))
+            l += 1
+            numberOfValues = 0
+            meanVal = 0.0
 
-    centerWavelength = .2
-    wavelengthCounter = 0
-    prevFirst = 0
-    while wavelengthCounter < len(model.wavelength):
-        wavelength = model.wavelength.values[wavelengthCounter]
+        ultimaLam = lastLam
+        lastLam = lam
+        ultimaVal = lastVal
+        lastVal = val
+        meanVal += lastVal
+        numberOfValues += 1
+        lambdaIndex += 1
 
-        # finds the first center wavelength
-        if wavelength >= centerWavelength:
-            # Calculate the deltalambda of the current center wavelength
-            deltaLambda = centerWavelength / resolvingpower
-
-            # find the high and low value of the bin for the center wavelength
-            lowValue = centerWavelength - deltaLambda
-            highValue = centerWavelength + deltaLambda
-            
-            fluxValuesInRange = []
-            
-            # run through each wavelength looking for the values in this bin's range
-            # These variables keep track of the smallest difference between the high or low limit of the bin
-            # and the wavelength closest to them in the dataset
-            # Theya re used when there are no wavelengths from the dataset that fall in the bin range
-            smallestDiff = 9999999999999999999
-            closestWavelengthIndex = -1
-            waveIndex = prevFirst
-            first = True
-
-            while True:
-                value = model.wavelength.values[waveIndex]
-                currentDiff = min(abs(lowValue - value), abs(highValue - value))
-                if currentDiff < smallestDiff:
-                    smallestDiff = currentDiff
-                    closestWavelengthIndex = waveIndex
-                if value >= lowValue and value <= highValue:
-                    # Add the appropriate flux values to the list
-                    fluxValuesInRange.append(model.flux.values[waveIndex])
-                    if first:
-                        prevFirst = waveIndex
-                        first = False
-                elif value > highValue:
-                    # Check to see if the list of flux values in range is empty
-                    if not fluxValuesInRange:
-                        fluxValuesInRange.append(model.flux.values[closestWavelengthIndex])
-                    break
-                waveIndex += 1
-            
-            # calcualte the bin's average
-            binAverageFlux = mean(fluxValuesInRange)
-            binAverageFluxString = "{:.7e}".format(binAverageFlux)
-            
-            # add the wavelength/flux pair to the dictionary
-            binnedValuesDict[centerWavelength] = binAverageFlux
-            centerWavelengthString = "{:.9e}".format(centerWavelength)
-            binnedStringValuesDict[centerWavelengthString] = binAverageFluxString
-
-            # calculate the new center wavelength by adding it to the current delta lambda
-            centerWavelength = centerWavelength + deltaLambda
-
-        # print(wavelength)
-        if centerWavelength > 20:
-            break
-
-        wavelengthCounter += 1
-
-    # Create a list of wavelength, flux pairs of the binnned data
-    # binnedData = []
-    # for key in binnedValuesDict:
-    #     listPair = [key, binnedValuesDict[key]]
-    #     binnedData.append(listPair)
-
-    print(type(binnedValuesDict.items()))
-    binnedModel = pd.DataFrame(list(binnedValuesDict.items()), columns=['wavelength', 'flux'])
-    binnedModelStrings = pd.DataFrame(list(binnedStringValuesDict.items()), columns=['wavelength', 'flux'])
-    print(binnedModel)
-    print(binnedModel.columns)
-    print("done")
+    if start_time != None:
+        print("Time after binning")
+        print("--- %s seconds ---" % (time.time() - start_time))
+    binnedModel = pd.DataFrame(list(zip(cwValues, outputY)), columns =['wavelength', 'flux'])
+    binnedModelStrings = pd.DataFrame(list(zip(cwValuesString, outputYstring)), columns =['wavelength', 'flux'])
 
     # This code plots the difference in wavelength values of the raw data. Shows a resolution across the model
     wavelengthDifference = []
@@ -165,7 +149,7 @@ def readmodel(
             wavelengthResolution.append(float('nan'))
             frequencyDiff.append(float('nan'))
             frequencyList.append(float('nan'))
-            print("End of file")
+            # print("End of file")
         else:
             frequency = c/value
             diffWave = binnedModel.wavelength[count + 1] - value
@@ -175,13 +159,13 @@ def readmodel(
             frequencyList.append(frequency)
             frequencyDiff.append(diffFreq)
 
-            print(diffWave)
-            print(value/diffWave)
-            print(diffFreq)
-            if diffWave > 0.05:
-                print(model.wavelength[count])
-                print("Greater than 0.05")
-                print(diffWave)
+            # print(diffWave)
+            # print(value/diffWave)
+            # print(diffFreq)
+            # if diffWave > 0.05:
+            #     print(model.wavelength[count])
+            #     print("Greater than 0.05")
+            #     print(diffWave)
         count += 1
     
     fig = plt.figure()
@@ -190,7 +174,7 @@ def readmodel(
     plt.title("Wavelength Spacing of NextGen Data")
     plt.ylabel("Delta Wavelength")
     plt.xlabel("Wavelength (um)")
-    plt.savefig('./spotty/BinnedNextGenModels/VariabilityGraphs/wavelengthSpacingOfRawData.png', bbox_inches='tight')
+    plt.savefig('./BinnedNextGenModels/VariabilityGraphs/wavelengthSpacingOfRawData.png', bbox_inches='tight')
     # plt.show()
     plt.close("all")
     print("WavelengthDiffPlot done")
@@ -203,7 +187,7 @@ def readmodel(
     plt.title("Wavelength Resolution of NextGen Data")
     plt.ylabel("Wavelength/Delta Wavelength (Wavelength Resolving Power)")
     plt.xlabel("Wavelength (um)")
-    plt.savefig('./spotty/BinnedNextGenModels/VariabilityGraphs/wavelengthResolvingPower.png', bbox_inches='tight')
+    plt.savefig('./BinnedNextGenModels/VariabilityGraphs/wavelengthResolvingPower.png', bbox_inches='tight')
     # plt.show()
     plt.close("all")
     print("WavelengthResolvingPowerPlot done")
@@ -214,7 +198,7 @@ def readmodel(
     plt.title("Delta Frequency of NextGen Data")
     plt.ylabel("Delta Frequency")
     plt.xlabel("Frequency (um/s)")
-    plt.savefig('./spotty/BinnedNextGenModels/VariabilityGraphs/frequencyDiff.png', bbox_inches='tight')
+    plt.savefig('./BinnedNextGenModels/VariabilityGraphs/frequencyDiff.png', bbox_inches='tight')
     # plt.show()
     plt.close("all")
     print("FrequencyDiffPlot done")
@@ -227,19 +211,35 @@ if __name__ == "__main__":
     while True:
         try:
             fileName = input("Config File Path ./Config/")
-            configParser.read_file(open("./spotty/Config/%s" % fileName))
+            configParser.read_file(open("./Config/%s" % fileName))
             break
         except FileNotFoundError:
             print("There is no file by that name, please try again.")
 
     # The file names for the wavelength/flux values of the star, spots, and faculae
-    phot_model_file = configParser.get('ProxCen', 'phot_model_file')
+    phot_model_file = configParser.get('Star', 'phot_model_file')
     phot_model_file = phot_model_file.strip('"') # configParser adds extra "" that I remove
-    spot_model_file = configParser.get('ProxCen', 'spot_model_file')
+    spot_model_file = configParser.get('Star', 'spot_model_file')
     spot_model_file = spot_model_file.strip('"')
-    fac_model_file = configParser.get('ProxCen', 'fac_model_file')
+    fac_model_file = configParser.get('Star', 'fac_model_file')
     fac_model_file = fac_model_file.strip('"')
 
+    resolvingPower = int(configParser.get('Star', 'resolvingPower'))
+    binnedWavelengthMin = float(configParser.get('Star', 'binnedWavelengthMin'))
+    binnedWavelengthMax = float(configParser.get('Star', 'binnedWavelengthMax'))
+
+    topValues = []
+    cwValues = []
+    CW = binnedWavelengthMin
+    while CW < binnedWavelengthMax:
+        deltaLambda = CW / resolvingPower
+        topValue = CW + (deltaLambda / 2)
+        topValues.append(topValue)
+        cwValues.append(CW)
+        CW = CW + deltaLambda
+
+
+    start_time = time.time()
     # Returns a dataframe of the binned wavelength/flux pairs as formatted strings
     binnedStarspectrum = readmodel(
         phot_model_file,
@@ -248,14 +248,24 @@ if __name__ == "__main__":
         rangemax=20.5,  # in micron, based on  MIRECLE constraints
         bin_data=True,
         ngridpoints=3000,
-        resolvingpower=5000,
+        resolvingPower = resolvingPower,
+        topValues = topValues,
+        cwValues=cwValues,
+        start_time=start_time
         )
     
+    print("Time after binning and plotting")
+    print("--- %s seconds ---" % (time.time() - start_time))
+
     binnedStarspectrumCSV = binnedStarspectrum.to_csv(index=False, header=['WAVELENGTH (MICRONS)','FLUX (ERG/CM2/S/A)'], sep=' ')
     print("Type of CSV = ", type(binnedStarspectrumCSV))
-    file = open(r'./spotty/BinnedNextGenModels/binned3000StellarModel.txt','w')
+    file = open(r'./BinnedNextGenModels/binned3000StellarModel.txt','w')
     file.write(binnedStarspectrumCSV)
     file.close()
+
+    print("\n")
+    print("Time after binning and plotting and txt output")
+    print("--- %s seconds ---" % (time.time() - start_time))
 
     binnedSpotspectrum = readmodel(
         spot_model_file,
@@ -264,12 +274,14 @@ if __name__ == "__main__":
         rangemax=20.5,  # in micron, based on MIRECLE constraints
         bin_data=True,
         ngridpoints=3000,
-        resolvingpower=5000,
+        resolvingPower=5000,
+        topValues = topValues,
+        cwValues=cwValues,
         )
 
     binnedSpotspectrumCSV = binnedSpotspectrum.to_csv(index=False, header=['WAVELENGTH (MICRONS)','FLUX (ERG/CM2/S/A)'], sep=' ')
     print("Type of CSV = ", type(binnedStarspectrumCSV))
-    file = open(r'./spotty/BinnedNextGenModels/binned2600StellarModel.txt','w')
+    file = open(r'./BinnedNextGenModels/binned2600StellarModel.txt','w')
     file.write(binnedSpotspectrumCSV)
     file.close()
 
@@ -280,11 +292,13 @@ if __name__ == "__main__":
         rangemax=20.5, # in micron, based on MIRECLE constraints
         bin_data=True,
         ngridpoints=3000,
-        resolvingpower=5000,
+        resolvingPower=5000,
+        topValues = topValues,
+        cwValues=cwValues,
         )
 
     binnedFaculaespectrumCSV = binnedFaculaespectrum.to_csv(index=False, header=['WAVELENGTH (MICRONS)','FLUX (ERG/CM2/S/A)'], sep=' ')
     print("Type of CSV = ", type(binnedStarspectrumCSV))
-    file = open(r'./spotty/BinnedNextGenModels/binned3100StellarModel.txt','w')
+    file = open(r'./BinnedNextGenModels/binned3100StellarModel.txt','w')
     file.write(binnedFaculaespectrumCSV)
     file.close()
