@@ -86,13 +86,13 @@ def make_gif(num_exposures):
     #     images.append(imageio.imread(filename))
     # imageio.mimsave("./ProxCen/VariabilityGraphs/variableFluxMovie.gif", images)
 
-    # Creates a .gif of the smoothed variable flux plots
-    images = []
-    for filename in filenamesSmoothedVariability:
-        images.append(imageio.imread(filename))
-    imageio.mimsave("./ProxCen/SmoothedVariabilityGraphs/variableSmoothedFluxMovie.gif", images)
+    # # Creates a .gif of the smoothed variable flux plots
+    # images = []
+    # for filename in filenamesSmoothedVariability:
+    #     images.append(imageio.imread(filename))
+    # imageio.mimsave("./ProxCen/SmoothedVariabilityGraphs/variableSmoothedFluxMovie.gif", images)
 
-    print("Done")
+    # print("Done")
 
 if __name__ == "__main__":
     configParser = configparser.RawConfigParser()

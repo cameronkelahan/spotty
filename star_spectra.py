@@ -13,24 +13,20 @@ class Spectramodel():
     def __init__(
         self,
         teffStar,
+        starName,
         starspectrum,
         spotspectrum,
+        faculaespectrum,
         Rotstar,
         surface_map,
-        inclincation,
+        inclination,
         flux_min,
         flux_max,
     ):
-        # Inherit parent class's methods and attributes
-        super().__init__(
-            teffStar,
-            Rotstar,
-            surface_map,
-            inclination,
-        )
 
         self.teffStar = teffStar
-        self._set_model_spectra(starspectrum, spotspectrum)
+        self.starName = starName
+        self._set_model_spectra(starspectrum, spotspectrum, faculaespectrum)
         self.Rotstar = Rotstar
         self.surface_map = surface_map
         self.inclination = inclination
@@ -38,10 +34,10 @@ class Spectramodel():
         self.flux_max = flux_max
 
     # Create a a Dataframe called modelspectra which houses the wavelength, photoflux, and spotflux values
-    def _set_model_spectra(self, starspectrum, spotspectrum):
-        if not np.all(starspectrum.wavelength == spotspectrum.wavelength):
-            raise ValueError("The star and spot spectra should be on the same wavelength scale")
-        data = {'wavelength': starspectrum.wavelength, 'photflux': starspectrum.flux, 'spotflux': spotspectrum.flux}
+    def _set_model_spectra(self, starspectrum, spotspectrum, faculaespectrum):
+        if not np.all(starspectrum.wavelength == spotspectrum.wavelength) or not np.all(starspectrum.wavelength == faculaespectrum.wavelength):
+            raise ValueError("The star, spot, and faculae spectra should be on the same wavelength scale")
+        data = {'wavelength': starspectrum.wavelength, 'photflux': starspectrum.flux, 'spotflux': spotspectrum.flux, 'facflux': faculaespectrum.flux}
         self.modelspectra = pd.DataFrame(data)
 
 
@@ -50,10 +46,10 @@ class Spectramodel():
         # add where the 3rd dimension index is certain color
         flat_image = hemi_map[~hemi_map.mask].flatten()
         total_size = flat_image.shape[0]
-        spot = sum(flat_image)
-        photo = total_size - spot
-        # photo = np.where(flat_image == 0)[0].shape[0]
-        # spot = np.where(flat_image == 1)[0].shape[0]
+        photo = np.where(flat_image == 0)[0].shape[0]
+        spot = np.where(flat_image == 1)[0].shape[0]
+        fac = np.where(flat_image == 2)[0].shape[0]
+
         # planet  = np.where(flat_image == 2)[0].shape[0]
 
         if ignore_planet:
@@ -64,12 +60,13 @@ class Spectramodel():
 
         photo_frac =  photo / total_size_mod
         spot_frac = spot / total_size_mod
-        return photo_frac, spot_frac
+        fac_frac = fac / total_size_mod
+        return photo_frac, spot_frac, fac_frac
 
     # Calculate the total output flux value of the current phase based on the percentage of surface area taken up by spots
     def calculate_combined_spectrum(self, hemi_map):
-        photo_frac, spot_frac = self.calculate_coverage(hemi_map,)
-        self.modelspectra.insert(3, 'sumflux', (self.modelspectra.photflux * photo_frac) + (self.modelspectra.spotflux * spot_frac))
+        photo_frac, spot_frac, fac_frac = self.calculate_coverage(hemi_map,)
+        self.modelspectra.insert(4, 'sumflux', (self.modelspectra.photflux * photo_frac) + (self.modelspectra.spotflux * spot_frac) + (self.modelspectra.facflux * fac_frac))
 
     # Plot the spectra of the linearly combined spot and photo flux values based on the current phase
     def plot_combined_spectrum(self, count):
@@ -91,7 +88,7 @@ class Spectramodel():
         plt.ylabel("Flux (ERG/CM2/S/A)")
         plt.title("Linearly Combined Star and Spot Flux Values")
         
-        # plt.savefig("./spotty/ProxCen/SpectrumGraphs/combinedHemiSpectrum_%d" % count)
+        plt.savefig("./%s/SpectrumGraphs/combinedHemiSpectrum_%d" % (self.starName, count))
         # plt.show()
         plt.close("all")
 
@@ -164,9 +161,9 @@ class Spectramodel():
             plt.legend(loc='upper right')
             plot_count += 1
         if normalized_bins:
-            plt.savefig("./spotty/ProxCen/BinnedSpectraNorm/binnedNormHemiSpectrum_%d.png" % count)
+            plt.savefig("./%s/BinnedSpectraNorm/binnedNormHemiSpectrum_%d.png" % (self.starName, count))
         else:
-            plt.savefig("./spotty/ProxCen/BinnedSpectra/binnedHemiSpectrum_%d.png" % count)
+            plt.savefig("./%s/BinnedSpectra/binnedHemiSpectrum_%d.png" % (self.starName, count))
         # plt.show()
         plt.close("all")
 
@@ -186,146 +183,8 @@ class Spectramodel():
         plt.yscale("log")
         plt.ylabel("Flux (ERG/CM2/S/A)")
         plt.xlabel("Phase (0-360)")
-        # plt.savefig('./spotty/ProxCen/LightCurves/LightCurve_%d' % count, bbox_inches='tight')
+        plt.savefig('./%s/LightCurves/LightCurve_%d' % (self.starName, count), bbox_inches='tight')
         # plt.show()
         plt.close("all")
 
         return x, y
-
-if __name__ == "__main__":
-    
-    configParser = configparser.RawConfigParser()
-    while True:
-        try:
-            fileName = input("Config File Path ./Config/")
-            configParser.read_file(open("./spotty/Config/%s" % fileName))
-            break
-        except FileNotFoundError:
-            print("There is no file by that name, please try again.")
-    
-    # # Temperature values for the star, spots, and faculae
-    teffStar = int(configParser.get('ProxCen', 'teffStar'))
-    # teffSpot = int(configParser.get('ProxCen', 'teffSpot'))
-    # teffFac = int(configParser.get('ProxCen', 'teffFac'))
-
-    # The file names for the wavelength/flux values of the star, spots, and faculae
-    phot_model_file = configParser.get('ProxCen', 'phot_model_file')
-    phot_model_file = phot_model_file.strip('"') # configParser adds extra "" that I remove
-    spot_model_file = configParser.get('ProxCen', 'spot_model_file')
-    spot_model_file = spot_model_file.strip('"')
-    fac_model_file = configParser.get('ProxCen', 'fac_model_file')
-    fac_model_file = fac_model_file.strip('"')
-
-    # Rotation of star in days
-    Rotstar = float(configParser.get('ProxCen', 'Rotstar'))
-
-    # Rotation of star in days
-    inclination = float(configParser.get('ProxCen', 'Inclination'))
-
-    # Name of the .npy array which contains the flat surface map
-    surface_map_file = configParser.get('HemiMap', 'surface_map_file')
-    surface_map_file = surface_map_file.strip('"')
-    surface_map = np.load(surface_map_file)
-
-    # Total number of exposures to be takn
-    num_exposures = int(configParser.get('HemiMap', 'num_exposures'))
-    # Time *in days) between exposures
-    time_between_exposures = float(configParser.get('HemiMap', 'time_between_exposures'))
-
-    # Number of wavelength bins to be graphed
-    num_bins = int(configParser.get('Spectra', 'num_bins'))
-    # List of the Wavelength bins' lower and upper bounds
-    list_bins = ast.literal_eval(configParser.get('Spectra', 'list_bins'))
-    # Tells the program whether or not to normalize the binned flux values
-    normalized_bins = configParser.get('Spectra', 'normalized_bins')
-    if normalized_bins == "True" or normalized_bins == "true" or normalized_bins == "TRUE":
-        normalized_bins = True
-    else: normalized_bins = False
-    
-    # Calculates what percent the time between exposures is compared to the stellar rotation period
-    # Used to calculate the change in phase between images
-    exposure_time_percent = time_between_exposures * (100 / Rotstar)
-    # print("Exposure Time percent = ", exposure_time_percent)
-    deltaPhase = exposure_time_percent / 100
-    # print("Delta Phase = ", deltaPhase)
-    
-    starspectrum, starSpectrumString = readmodel(
-        phot_model_file,
-        cut_range=True,
-        rangemin=0,  # in micron, based on MIRECLE constraints
-        rangemax=20.000,  # in micron, based on  MIRECLE constraints
-        bin_data=True,
-        resolvingPower=5000,
-    )
-
-    spotspectrum, spotSpectrumString = readmodel(
-        spot_model_file,
-        cut_range=True,
-        rangemin=0,  # in micron, based on MIRECLE constraints
-        rangemax=20.000,  # in micron, based on MIRECLE constraints
-        bin_data=True,
-        resolvingPower=5000,
-    )
-
-    faculaespectrum, faculaeSpectrumString = readmodel(
-        fac_model_file,
-        cut_range=True,
-        rangemin=0, # in micron, based on MIRECLE constraints
-        rangemax=20.000, # in micron, based on MIRECLE constraints
-        bin_data=True,
-        resolvingPower=5000,
-    )
-
-    # Create a HemiMap class
-    SM = Spectramodel(
-        teffStar,
-        starspectrum,
-        spotspectrum,
-        Rotstar,
-        surface_map,
-        inclination,
-        flux_min = min(spotspectrum.flux),
-        flux_max = max(starspectrum.flux),
-    )
-
-    phase = 0
-    count = 0
-    x = []
-    y = []
-
-    hemi_fluxes = [[SM.modelspectra.wavelength], []]
-
-    # This for loop is for each hemisphere image/each phase
-    for value in range(num_exposures):
-        # Loads in the hemiMap information for the current phase
-        hemi_map = np.load('./spotty/ProxCen/HemiMapImages+Arrays/hemiArray_%d' % count, allow_pickle=True)
-
-        # Calculates the star's combined spectrum for the given hemisphere and adds a column to the SM's
-        # model info called sumflux
-        SM.calculate_combined_spectrum(hemi_map)
-        SM.plot_combined_spectrum(count)
-
-        hemi_fluxes[1].append(SM.modelspectra.sumflux)
-
-        # This keeps track of which bin is being looked at currently
-        list_index = 0
-        # Plot the flux values of the chose n binned wavelengths
-        # SM.plot_binned_spectrum(list_bins, count, normalized_bins)
-
-        x, y = SM.plot_light_curve(count, x, y)
-
-        # Advance the ohase; a.k.a. rotate the star
-        phase += deltaPhase
-        print("Phase = ", phase)
-        if (phase > 1):
-            phase = phase % 1
-        count += 1
-
-        # remove this phase's sumflux column of the modelspectra data frame of the SM object to make way for the next phase
-        del SM.modelspectra['sumflux']
-
-    hemi_fluxes = np.asarray(hemi_fluxes)
-    # np.save('./spotty/ProxCen/SumfluxArraysByPhase/wavelengthsAndSumfluxValuesByPhase.npy', hemi_fluxes, allow_pickle=True)
-
-    loaded = np.load('./spotty/ProxCen/SumfluxArraysByPhase/wavelengthsAndSumfluxValuesByPhase.npy', allow_pickle=True)
-    print("Done")

@@ -33,7 +33,6 @@ def readmodel(
     resolvingPower=5000,
     topValues=None,
     cwValues=None,
-    start_time=None
 ):
     if (cut_range and rangemin is None) | (cut_range and rangemax is None):
         raise TypeError("If cut_range is True, cutmin and cutmax must not be None")
@@ -70,6 +69,8 @@ def readmodel(
     outputY = []
     outputYstring = []
     cwValuesString = []
+
+    start_time = time.time()
 
     lambdaIndex = 0
     while lambdaIndex < len(model.wavelength):
@@ -130,9 +131,8 @@ def readmodel(
         numberOfValues += 1
         lambdaIndex += 1
 
-    if start_time != None:
-        print("Time after binning")
-        print("--- %s seconds ---" % (time.time() - start_time))
+    print("Time after binning")
+    print("--- %s seconds ---" % (time.time() - start_time))
     binnedModel = pd.DataFrame(list(zip(cwValues, outputY)), columns =['wavelength', 'flux'])
     binnedModelStrings = pd.DataFrame(list(zip(cwValuesString, outputYstring)), columns =['wavelength', 'flux'])
 
@@ -251,7 +251,6 @@ if __name__ == "__main__":
         resolvingPower = resolvingPower,
         topValues = topValues,
         cwValues=cwValues,
-        start_time=start_time
         )
     
     print("Time after binning and plotting")

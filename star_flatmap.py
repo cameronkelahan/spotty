@@ -7,6 +7,11 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from statistics import mean
 import matplotlib
 import configparser
+import os
+
+# Temporary:
+import sys
+np.set_printoptions(threshold=sys.maxsize)
 
 # This program generates the spots on the star and plots the star's surface as a rectangle
 # It takes into account the spherical nature and distorts the spots as appropriate on the 2d projection
@@ -44,10 +49,10 @@ def readmodel(
         raise TypeError("If bin_data is True, cutmin and cutmax must not be None")
 
     model = pd.read_csv(
-        # For the binned NextGenModels
-        filename, skiprows=1, delim_whitespace=True, names=["wavelength", "flux"]
-        # # For the original btNextGenStellarModels
-        # filename, skiprows=7, delim_whitespace=True, names=["wavelength", "flux"]
+        # # For the binned NextGenModels
+        # filename, skiprows=1, delim_whitespace=True, names=["wavelength", "flux"]
+        # For the original btNextGenStellarModels
+        filename, skiprows=7, delim_whitespace=True, names=["wavelength", "flux"]
     )
 
     # lets convert to micron
@@ -212,11 +217,17 @@ def readmodel(
 class Spotmodel:
     def __init__(
         self,
-        spotcoverage,
-        spotnumber,
+        spotCoverage,
+        spotNumber,
+        facCoverage,
+        facNumber,
+        starName,
     ):
-        self.spotcoverage = spotcoverage
-        self.spotnumber = spotnumber
+        self.spotCoverage = spotCoverage
+        self.spotNumber = spotNumber
+        self.facCoverage = facCoverage
+        self.facNumber = facNumber
+        self.starName = starName
 
     def generate_spots(self, randomSeed=None):
         if randomSeed is not None:
@@ -224,28 +235,55 @@ class Spotmodel:
         # Why is radius here chosen to be 1?
         surface_area = 4.0 * np.pi * 1.0 ** 2
         # Picks spotnumber of radius'. all between 0 and 1
-        spot_radius = np.random.random_sample(self.spotnumber)
-        print("Spot Radius= ", spot_radius)
-        total_coverage = np.sum(np.pi * spot_radius ** 2)
-        print("Total Coverage = ", total_coverage)
-        normalization = surface_area * self.spotcoverage / total_coverage
-        print("Normalization = ", normalization)
-        true_radius = spot_radius * normalization ** 0.5
-        print("True_Radius = ", true_radius)
+        spot_radius = np.random.random_sample(self.spotNumber)
+        fac_radius = np.random.random_sample(self.facNumber)
+
+        total_spot_coverage = np.sum(np.pi * spot_radius ** 2)
+        total_fac_coverage = np.sum(np.pi * fac_radius ** 2)
+
+        spotNormalization = surface_area * self.spotCoverage / total_spot_coverage
+        facNormalization = surface_area * self.facCoverage / total_fac_coverage
+
+        true_spot_radius = spot_radius * spotNormalization ** 0.5
+        true_fac_radius = fac_radius * facNormalization ** 0.5
 
         # Limits latitude to between 60 and -60? Based on Butterfly effect?
-        lat = -60 + 120 * np.random.random_sample(self.spotnumber)
+        spotLat = -60 + 120 * np.random.random_sample(self.spotNumber)
+        facLat = -60 + 120 * np.random.random_sample(self.facNumber)
         # Limits Longitude to between -180 and 180
-        lon = -180 + 360 * np.random.random_sample(self.spotnumber)
+        spotLon = -180 + 360 * np.random.random_sample(self.spotNumber)
+        facLon = -180 + 360 * np.random.random_sample(self.facNumber)
 
-        surface_map = self.generate_flat_surface_map(true_radius, lon, lat,)
-        print("Type of surface_map = ", type(surface_map))
+        surface_map = self.generate_flat_surface_map(true_spot_radius, spotLon, spotLat,
+                                                     true_fac_radius, facLon, facLat,)
+        # print("Type of surface_map = ", type(surface_map))
+
+        flat_image = surface_map.flatten()
+        length = len(flat_image)
+        print("Length = ", length)
+        spot_pixels = np.where(flat_image == 1)
+        print(len(spot_pixels[0]))
+        fac_pixels = np.where(flat_image == 2)
+        print(len(fac_pixels[0]))
+        # summ = sum(flat_image)
+        surfaceMapSpotCoverage = len(spot_pixels[0]) / length
+        surfaceMapFacCoverage = len(fac_pixels[0]) / length
+
+        print("SpotCoverage = ", surfaceMapSpotCoverage)
+        print("FacCoverage = ", surfaceMapFacCoverage)
+
+        if os.path.isfile('./%s/surfaceMapInfo.txt' % self.starName):
+            os.remove('./%s/surfaceMapInfo.txt' % self.starName)
+        f = open('./%s/surfaceMapInfo.txt' % self.starName, 'a')
+        f.write('Spot Coverage Percentage = {:.2f}%\n'.format(surfaceMapSpotCoverage * 100))
+        f.write('Fac Coverage Percentage = {:.2f}%\n'.format(surfaceMapFacCoverage * 100))
+        f.close()
 
         plt.close("all")
         return surface_map
 
     # @njit
-    def generate_flat_surface_map(self, spot_radii, lon, lat):
+    def generate_flat_surface_map(self, spot_radii, spotLon, spotLat, fac_radii, facLon, facLat):
         # we create an image using matplotlib (!!)
         fig = plt.figure(figsize=[5.00, 2.5], dpi=1200)
         proj = ccrs.PlateCarree()
@@ -259,54 +297,57 @@ class Spotmodel:
 
         # loop through each spot, adding it to the image
         # tissot assume the sphere is earth, so multiply by radius of earth
-        for spot in range(self.spotnumber):
+        for spot in range(self.spotNumber):
             add_spots = ax.tissot(
                 rad_km=spot_radii[spot] * rEarth,
-                lons=lon[spot],
-                lats=lat[spot],
+                lons=spotLon[spot],
+                lats=spotLat[spot],
                 n_samples=1000,
                 fc="k",
                 alpha=1,
             )
+        
+        canvas.draw()
+        buf = canvas.buffer_rgba()
+        surface_map_image = np.asarray(buf)
+        # print(surface_map_image[1000][1000])
+        # 0 = photosphere
+        # 1 = spot
+        # 2 = fac
+        surface_map = np.where(surface_map_image[:, :, 0] == 255, 0, 1)
+
+        # fac_map = np.where(surface_map_image[:, :, 2] == 255)
+        # surface_map[fac_map] = 2
+        # print(surface_map)
+
+        plt.savefig('./%s/TempFlatMap.png' % self.starName)
+
+        for fac in range(self.facNumber):
+            add_facs = ax.tissot(
+                rad_km=fac_radii[fac] * rEarth,
+                lons=facLon[fac],
+                lats=facLat[fac],
+                n_samples=1000,
+                fc="b",
+                alpha=1,
+            )
+        
         canvas.draw()
         buf = canvas.buffer_rgba()
         surface_map_image = np.asarray(buf)
         # 0 = photosphere
         # 1 = spot
-        # 2 = planet
-        surface_map = np.where(surface_map_image[:, :, 0] == 255, 0, 1)
+        # 2 = fac
+        fac_map = np.where(surface_map_image[:, :, 2] == 255, 2, 0)
+        for row in range(len(fac_map)):
+            for col in range(len(fac_map[row])):
+                if fac_map[row][col] == 2:
+                    surface_map[row][col] = 2
+        # print(surface_map)
+
         
         # Save and show the surface map values (1 or 0) that create the red/black map image (rectangular shape)
         # NOTE: the plt.show() function does not scale well with this plot, must view from file
-        plt.savefig('./spotty/ProxCen/FlatMap.png')
+        plt.savefig('./%s/FlatMap.png' % self.starName)
         # plt.show()
         return surface_map
-
-if __name__ == "__main__":
-    
-    configParser = configparser.RawConfigParser()
-    while True:
-        try:
-            fileName = input("Config File Path ./spotty/Config/")
-            configParser.read_file(open("./spotty/Config/%s" % fileName))
-            break
-        except FileNotFoundError:
-            print("There is no file by that name, please try again.")
-    
-    spotcoverage = int(configParser.get('ProxCen', 'spotcoverage'))
-    spotnumber = int(configParser.get('ProxCen', 'spotnumber'))
-
-    # Turn spot coverage into a percentage
-    spotcoverage /= 100
-
-    SM = Spotmodel(
-        spotcoverage,
-        spotnumber,
-    )
-
-    surface_map = SM.generate_spots()
-
-    surface_map = surface_map.astype(np.int8)
-
-    # Saves the numpy array version of the flat surface map to be loaded into other programs
-    np.save('./spotty/ProxCen/flatMap.npy', surface_map)

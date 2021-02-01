@@ -1,0 +1,2 @@
+Spot Coverage Percentage = 1e+01%
+Fac Coverage Percentage = 5.3%
